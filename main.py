@@ -128,12 +128,13 @@ from fastapi.middleware.cors import CORSMiddleware
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in os.environ.get(
-        "ALLOWED_ORIGINS", "http://127.0.0.1:5500"
-    ).split(",")],
+    allow_origins=[
+        "http://127.0.0.1:5500",
+        "https://pursuit-rouge.vercel.app",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    allow_credentials=True,
 )
 
 @app.middleware("http")
