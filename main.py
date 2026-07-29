@@ -70,7 +70,6 @@ GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-print("Gemini key:", GEMINI_API_KEY[:10])
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
@@ -1635,5 +1634,3 @@ def post_chat_message(request: Request, chat_id: int, data: ChatMessageInput, cu
     db.commit()
     db.close()
     return {"reply": reply, "title": new_title}
-
-print(bool(os.getenv("GEMINI_API_KEY")))
