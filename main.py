@@ -107,8 +107,8 @@ def set_session_cookie(response: Response, token: str):
         key=COOKIE_NAME,
         value=token,
         httponly=True,
-        samesite="lax",
-        secure=IS_PRODUCTION,   # True once served over https (Render), False locally
+        samesite="none" if IS_PRODUCTION else "lax",
+        secure=IS_PRODUCTION,
         max_age=COOKIE_MAX_AGE,
         path="/",
     )
