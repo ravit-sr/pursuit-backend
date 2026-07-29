@@ -1,0 +1,15 @@
+# Secrets
+.env
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Uploaded user files
+uploads/
+
+# Local DB dumps (may contain real user data / live tokens)
+*.sql
+!data.sql
+!migrations/*.sql
