@@ -930,6 +930,13 @@ def delete_resume(resume_id: int, current_user_id: int = Depends(get_current_use
         os.remove(file_path)
 
     mc2 = db.cursor()
+    mc2.execute(
+        "DELETE rcm FROM resume_chat_messages rcm "
+        "JOIN resume_chats rc ON rcm.chatId = rc.id "
+        "WHERE rc.resumeId = %s",
+        (resume_id,)
+    )
+    mc2.execute("DELETE FROM resume_chats WHERE resumeId = %s", (resume_id,))
     mc2.execute("DELETE FROM resumes WHERE id = %s", (resume_id,))
 
     if resume["active"]:
