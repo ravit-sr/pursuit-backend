@@ -70,6 +70,7 @@ GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
 GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+BREVO_API_KEY = os.environ.get("BREVO_API_KEY", "")
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 GMAIL_ADDRESS = os.environ.get("GMAIL_ADDRESS", "")
 GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD", "")
@@ -146,25 +147,26 @@ async def add_security_headers(request, call_next):
     return response
 
 def send_email(to_email: str, subject: str, html_body: str):
-    logger.info("Connecting to Gmail...")
-
-    msg = MIMEText(html_body, "html")
-    msg["Subject"] = subject
-    msg["From"] = f"Pursuit <{GMAIL_ADDRESS}>"
-    msg["Reply-To"] = GMAIL_ADDRESS
-    msg["To"] = to_email
-
-    with smtplib.SMTP("smtp.gmail.com", 587) as server:
-        logger.info("Starting TLS...")
-        server.starttls()
-
-        logger.info("Logging in...")
-        server.login(GMAIL_ADDRESS, GMAIL_APP_PASSWORD)
-
-        logger.info("Sending email...")
-        server.sendmail(GMAIL_ADDRESS, [to_email], msg.as_string())
-
-        logger.info("Email sent successfully.")
+    logger.info("Sending email via Brevo API...")
+    resp = requests.post(
+        "https://api.brevo.com/v3/smtp/email",
+        headers={
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json",
+        },
+        json={
+            "sender": {"name": "Pursuit", "email": GMAIL_ADDRESS},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "htmlContent": html_body,
+        },
+        timeout=15,
+    )
+    if resp.status_code >= 300:
+        logger.error("Brevo send failed: %s %s", resp.status_code, resp.text)
+        raise Exception(f"Email send failed: {resp.status_code}")
+    logger.info("Email sent successfully via Brevo.")
 
 
 class ApplicationInput(BaseModel):
