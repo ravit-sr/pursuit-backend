@@ -46,6 +46,7 @@ if os.environ.get("DEBUG_HTTPX_REQUESTS", "").lower() == "true":
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from typing import Optional
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -1279,7 +1280,10 @@ def google_calendar_connect(session_token: str = Cookie(None, alias=COOKIE_NAME)
     return RedirectResponse(google_authorize_url)
 
 @app.get("/integrations/google/callback")
-def google_calendar_callback(code: str, state: str):
+def google_calendar_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    if error or not code or not state:
+        return RedirectResponse(FRONTEND_URL + "/settings.html?error=google_calendar_failed")
+
     try:
         user_id, purpose = decode_integration_state(state)
     except jwt.PyJWTError:
