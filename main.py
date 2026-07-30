@@ -852,7 +852,11 @@ def update_password(data: PasswordUpdateInput, current_user_id: int = Depends(ge
 def get_resumes(current_user_id: int = Depends(get_current_user)):
     db = get_db_connection()
     mc = db.cursor(dictionary=True)
-    mc.execute("SELECT * FROM resumes WHERE userId = %s ORDER BY uploadedAt DESC", (current_user_id,))
+    mc.execute(
+        "SELECT id, userId, fileName, storedFileName, fileSize, uploadedAt, active, analysisJson, analyzedAt "
+        "FROM resumes WHERE userId = %s ORDER BY uploadedAt DESC",
+        (current_user_id,)
+    )
     resumes = mc.fetchall()
     db.close()
     return resumes
