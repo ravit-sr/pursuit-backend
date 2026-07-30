@@ -868,9 +868,7 @@ async def upload_resume(file: UploadFile = File(...), current_user_id: int = Dep
     contents = await file.read()
     if len(contents) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File must be under 5MB.")
-
-    # Don't trust the extension alone — check the actual file signature.
-    # .docx files are zip archives (PK\x03\x04), PDFs start with %PDF.
+    
     ext_lower = ext.lower()
     if ext_lower == ".pdf" and not contents.startswith(b"%PDF-"):
         raise HTTPException(status_code=400, detail="That file doesn't look like a valid PDF.")
@@ -895,8 +893,8 @@ async def upload_resume(file: UploadFile = File(...), current_user_id: int = Dep
 
     mc2 = db.cursor()
     mc2.execute(
-        "INSERT INTO resumes (userId, fileName, storedFileName, fileSize, active) VALUES (%s, %s, %s, %s, %s)",
-        (current_user_id, file.filename, stored_name, len(contents), not has_active)
+        "INSERT INTO resumes (userId, fileName, storedFileName, fileSize, active, fileData) VALUES (%s, %s, %s, %s, %s, %s)",
+        (current_user_id, file.filename, stored_name, len(contents), not has_active, contents)
     )
     db.commit()
     new_id = mc2.lastrowid
@@ -955,6 +953,25 @@ def extract_resume_text(file_path):
             return f.read().strip()
     elif ext == ".docx":
         doc = docx.Document(file_path)
+        paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+        return "\n".join(paragraphs).strip()
+    else:
+        return None
+
+def extract_resume_text_from_bytes(file_bytes, ext):
+    ext = ext.lower()
+    if ext == ".pdf":
+        text = ""
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        return text.strip()
+    elif ext == ".txt":
+        return file_bytes.decode("utf-8", errors="ignore").strip()
+    elif ext == ".docx":
+        doc = docx.Document(io.BytesIO(file_bytes))
         paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
         return "\n".join(paragraphs).strip()
     else:
@@ -1049,12 +1066,17 @@ def analyze_resume(request: Request, resume_id: int, current_user_id: int = Depe
         db.close()
         raise HTTPException(status_code=404, detail="Resume not found.")
 
+    ext = os.path.splitext(resume["storedFileName"])[1]
     file_path = os.path.join(UPLOAD_DIR, resume["storedFileName"])
-    if not os.path.exists(file_path):
-        db.close()
-        raise HTTPException(status_code=404, detail="Resume file missing on disk.")
 
-    resume_text = extract_resume_text(file_path)
+    if os.path.exists(file_path):
+        resume_text = extract_resume_text(file_path)
+    elif resume.get("fileData"):
+        resume_text = extract_resume_text_from_bytes(bytes(resume["fileData"]), ext)
+    else:
+        db.close()
+        raise HTTPException(status_code=404, detail="Resume file not found. Please re-upload your resume.")
+
     if not resume_text:
         db.close()
         raise HTTPException(status_code=400, detail="Could not extract text — please upload a PDF, DOCX, or TXT resume.")
@@ -1087,18 +1109,24 @@ def preview_resume(resume_id: int, current_user_id: int = Depends(get_current_us
     if resume is None:
         raise HTTPException(status_code=404, detail="Resume not found.")
 
+    ext = os.path.splitext(resume["storedFileName"])[1].lower()
     file_path = os.path.join(UPLOAD_DIR, resume["storedFileName"])
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Resume file missing on disk.")
 
-    ext = os.path.splitext(file_path)[1].lower()
+    # Prefer disk file; fall back to DB-stored bytes
+    if os.path.exists(file_path):
+        file_bytes = open(file_path, "rb").read()
+    elif resume.get("fileData"):
+        file_bytes = bytes(resume["fileData"])
+    else:
+        raise HTTPException(status_code=404, detail="Resume file not found. Please re-upload your resume.")
+
     if ext == ".pdf":
-        return FileResponse(file_path, media_type="application/pdf")
+        from fastapi.responses import Response as RawResponse
+        return RawResponse(content=file_bytes, media_type="application/pdf")
     elif ext == ".txt":
-        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-            return {"type": "txt", "text": f.read()}
+        return {"type": "txt", "text": file_bytes.decode("utf-8", errors="ignore")}
     elif ext == ".docx":
-        doc = docx.Document(file_path)
+        doc = docx.Document(io.BytesIO(file_bytes))
         html_parts = []
         for p in doc.paragraphs:
             if p.text.strip():
@@ -1596,11 +1624,19 @@ def post_chat_message(request: Request, chat_id: int, data: ChatMessageInput, cu
         db.close()
         raise HTTPException(status_code=429, detail="You've reached today's limit of " + str(DAILY_CHAT_LIMIT) + " AI messages. Try again tomorrow.")
 
+    ext = os.path.splitext(resume["storedFileName"])[1]
     file_path = os.path.join(UPLOAD_DIR, resume["storedFileName"])
-    resume_text = extract_resume_text(file_path) if os.path.exists(file_path) else None
+
+    if os.path.exists(file_path):
+        resume_text = extract_resume_text(file_path)
+    elif resume.get("fileData"):
+        resume_text = extract_resume_text_from_bytes(bytes(resume["fileData"]), ext)
+    else:
+        resume_text = None
+
     if not resume_text:
         db.close()
-        raise HTTPException(status_code=400, detail="Could not read this resume's text — try a PDF, TXT, or DOCX file.")
+        raise HTTPException(status_code=400, detail="Could not read this resume's text. Please re-upload your resume.")
 
     user_message = data.message.strip()
     if not user_message:
